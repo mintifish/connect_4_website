@@ -1,0 +1,196 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Connect Four — Two Browser Game</title>
+	<style>
+		body { font-family: system-ui, -apple-system,Segoe UI, Roboto, Helvetica, Arial; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#0b1220; color:#e6eef8; margin:0; }
+		.app { width:900px; max-width:95vw; }
+		header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
+		h1 { font-size:20px; margin:0 }
+		.controls { display:flex; gap:8px; align-items:center }
+		input[type=text] { padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); color:inherit }
+		button { padding:8px 10px; border-radius:6px; border:0; background:#1e90ff; color:white; cursor:pointer }
+		#status { margin:6px 0 12px 0 }
+		.board { display:grid; grid-template-rows: repeat(6, 64px); grid-template-columns: repeat(7, 64px); gap:6px; background:#07304a; padding:12px; border-radius:10px; width: calc(7*64px + 6*6px + 24px); }
+		.cell { width:64px; height:64px; background:#0b6; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.03); position:relative }
+		.cell::after { content:''; display:block; width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,0.03); }
+		.disc { position:absolute; width:52px; height:52px; border-radius:50%; transition: transform 200ms ease; }
+		.disc.p0 { background: #ffcd00; box-shadow: inset -4px -4px 8px rgba(0,0,0,0.25) }
+		.disc.p1 { background: #ff4d6d; box-shadow: inset -4px -4px 8px rgba(0,0,0,0.25) }
+		.overlayCols { display:flex; gap:6px; margin-top:8px }
+		.colBtn { width:64px; height:28px; border-radius:6px; border:0; background:rgba(255,255,255,0.04); color:#cfe9ff; cursor:pointer }
+		.colBtn:disabled { opacity:0.35; cursor:default }
+		#log { margin-top:12px; font-size:13px; color:#cfe9ffcc }
+		@media(max-width:720px){ .board { transform:scale(.8); transform-origin:center top } }
+	</style>
+</head>
+<body>
+	<div class="app">
+		<header>
+			<h1>Connect Four — Two Browser Game</h1>
+			<div class="controls">
+				<input id="roomInput" placeholder="room id (optional)" />
+				<button id="joinBtn">Join / Create</button>
+			</div>
+		</header>
+
+		<div id="status">Not connected</div>
+
+		<div id="game" hidden>
+			<div id="info"></div>
+			<div class="board" id="board" aria-hidden="false"></div>
+			<div class="overlayCols" id="cols"></div>
+			<div id="log"></div>
+		</div>
+	</div>
+
+	<script>
+		const WS_URL = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host;
+		let ws = null;
+		let myIndex = null; // 0 or 1
+		let board = null; // 6x7 array
+		let current = 0;
+		const rows = 6, cols = 7;
+
+		const statusEl = document.getElementById('status');
+		const joinBtn = document.getElementById('joinBtn');
+		const roomInput = document.getElementById('roomInput');
+		const gameEl = document.getElementById('game');
+		const boardEl = document.getElementById('board');
+		const colsEl = document.getElementById('cols');
+		const infoEl = document.getElementById('info');
+		const logEl = document.getElementById('log');
+
+		function log(s){ logEl.textContent = s; }
+
+		function createBoardDom(){
+			boardEl.innerHTML='';
+			for(let r=0;r<rows;r++){
+				for(let c=0;c<cols;c++){
+					const cell = document.createElement('div');
+					cell.className='cell';
+					cell.dataset.r = r;
+					cell.dataset.c = c;
+					boardEl.appendChild(cell);
+				}
+			}
+		}
+				</html>
+			board = b.map(row => row.slice());
+			for(let r=0;r<rows;r++){
+				for(let c=0;c<cols;c++){
+					const idx = r*cols + c;
+					const cell = boardEl.children[idx];
+					cell.innerHTML='';
+					const val = board[r][c];
+					if(val === 0 || val === 1){
+						const disc = document.createElement('div');
+						disc.className = 'disc p' + (val);
+						cell.appendChild(disc);
+					}
+				}
+			}
+		}
+
+		function enableCols(enabled){
+			for(let i=0;i<cols;i++){
+				colsEl.children[i].disabled = !enabled;
+			}
+		}
+
+		function setInfo(){
+			if(myIndex===null) infoEl.textContent = 'Waiting to join...';
+			else if(current === myIndex) infoEl.textContent = 'Your turn';
+			else infoEl.textContent = 'Opponent turn';
+		}
+
+		function connectAndJoin(room){
+			ws = new WebSocket(WS_URL);
+			statusEl.textContent = 'Connecting...';
+			ws.addEventListener('open', ()=>{
+				statusEl.textContent = 'Connected — joining room ' + room;
+				ws.send(JSON.stringify({type:'join', room}));
+			});
+			ws.addEventListener('message', ev=>{
+				let msg;
+				try{ msg = JSON.parse(ev.data); }catch(e){ return }
+				handleMsg(msg);
+			});
+			ws.addEventListener('error', (e)=>{
+				console.error('WebSocket error', e);
+				statusEl.textContent = 'Connection error';
+			});
+			ws.addEventListener('close', ()=>{
+				statusEl.textContent = 'Disconnected';
+				myIndex = null; gameEl.hidden = true; setInfo();
+			});
+		}
+
+		function handleMsg(msg){
+			if(msg.type === 'joined'){
+				statusEl.textContent = 'Joined room: ' + msg.room;
+				createBoardDom();
+				// create column buttons
+				colsEl.innerHTML='';
+				for(let c=0;c<cols;c++){
+					const b = document.createElement('button');
+					b.className='colBtn'; b.textContent = '▼';
+					b.addEventListener('click', ()=>{ sendMove(c); });
+					colsEl.appendChild(b);
+				}
+				gameEl.hidden = false;
+				log('Waiting for opponent...');
+			} else if(msg.type === 'start'){
+				myIndex = msg.playerIndex;
+				board = Array.from({length:rows}, ()=>Array(cols).fill(null));
+				renderBoard(board);
+				current = 0;
+				setInfo();
+				log('Game started — you are player ' + (myIndex+1));
+				enableCols(current === myIndex);
+			} else if(msg.type === 'update'){
+				board = msg.board;
+				current = msg.current;
+				renderBoard(board);
+				setInfo();
+				enableCols(current === myIndex);
+			} else if(msg.type === 'moved'){
+				board = msg.board;
+				current = msg.current;
+				renderBoard(board);
+				setInfo();
+				enableCols(current === myIndex);
+			} else if(msg.type === 'game_over'){
+				board = msg.board; renderBoard(board);
+				if(msg.winner === null) alert('Draw!');
+				else if(msg.winner === myIndex) alert('You win!');
+				else alert('You lose.');
+				enableCols(false);
+				log('Game over');
+			} else if(msg.type === 'error'){
+				alert(msg.message || 'Error');
+			}
+		}
+
+		function sendMove(c){
+			if(!ws || ws.readyState !== WebSocket.OPEN) return;
+			ws.send(JSON.stringify({type:'move', col: c}));
+		}
+
+		joinBtn.addEventListener('click', ()=>{
+			const room = roomInput.value.trim() || Math.random().toString(36).slice(2,8);
+			connectAndJoin(room);
+		});
+
+		// Initialize UI
+		createBoardDom();
+		colsEl.innerHTML='';
+		for(let c=0;c<cols;c++){ const b=document.createElement('button'); b.className='colBtn'; b.disabled=true; b.textContent='▼'; colsEl.appendChild(b); }
+		setInfo();
+
+	</script>
+</body>
+</html>

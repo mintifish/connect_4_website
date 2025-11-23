@@ -1,0 +1,16 @@
+{
+  "name": "connect4-websocket",
+  "version": "1.0.0",
+  "description": "Two-player Connect Four using WebSockets",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "keywords": [],
+  "type": "commonjs"
+}
