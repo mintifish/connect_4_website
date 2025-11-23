@@ -34,6 +34,8 @@
 			<div class="controls">
 				<input id="roomInput" placeholder="room id (optional)" />
 				<button id="joinBtn">Join / Create</button>
+				<span id="roomLabel" style="margin-left:8px;color:#aeddff;font-size:13px"></span>
+				<button id="copyBtn" style="margin-left:6px;display:none;padding:6px;border-radius:6px">Copy</button>
 			</div>
 		</header>
 
@@ -64,7 +66,7 @@
 		const infoEl = document.getElementById('info');
 		const logEl = document.getElementById('log');
 
-		function log(s){ logEl.textContent = s; }
+		function log(s){ logEl.textContent = s; console.log('[client]', s); }
 
 		function createBoardDom(){
 			boardEl.innerHTML='';
@@ -78,7 +80,9 @@
 				}
 			}
 		}
-				</html>
+			// The following code should be inside the renderBoard function, not outside and not after </html>
+			// Remove the misplaced </html> tag and ensure the function is defined properly.
+		function renderBoard(b){
 			board = b.map(row => row.slice());
 			for(let r=0;r<rows;r++){
 				for(let c=0;c<cols;c++){
@@ -107,9 +111,19 @@
 			else infoEl.textContent = 'Opponent turn';
 		}
 
+		let currentRoom = null;
 		function connectAndJoin(room){
-			ws = new WebSocket(WS_URL);
-			statusEl.textContent = 'Connecting...';
+			currentRoom = room;
+			joinBtn.disabled = true;
+			statusEl.textContent = 'Connecting to server...';
+			try{
+				ws = new WebSocket(WS_URL);
+			}catch(e){
+				statusEl.textContent = 'WebSocket creation failed';
+				console.error(e);
+				joinBtn.disabled = false;
+				return;
+			}
 			ws.addEventListener('open', ()=>{
 				statusEl.textContent = 'Connected — joining room ' + room;
 				ws.send(JSON.stringify({type:'join', room}));
@@ -122,16 +136,25 @@
 			ws.addEventListener('error', (e)=>{
 				console.error('WebSocket error', e);
 				statusEl.textContent = 'Connection error';
+				joinBtn.disabled = false;
 			});
 			ws.addEventListener('close', ()=>{
 				statusEl.textContent = 'Disconnected';
 				myIndex = null; gameEl.hidden = true; setInfo();
+				joinBtn.disabled = false;
 			});
 		}
 
 		function handleMsg(msg){
 			if(msg.type === 'joined'){
 				statusEl.textContent = 'Joined room: ' + msg.room;
+				currentRoom = msg.room;
+				const roomLabel = document.getElementById('roomLabel');
+				roomLabel.textContent = msg.room;
+				const copyBtn = document.getElementById('copyBtn');
+				copyBtn.style.display = 'inline-block';
+				copyBtn.onclick = ()=>{ navigator.clipboard?.writeText(msg.room).then(()=>{ log('Room id copied') }).catch(()=>{ alert('Copy failed') }) };
+				joinBtn.disabled = true;
 				createBoardDom();
 				// create column buttons
 				colsEl.innerHTML='';
@@ -170,8 +193,10 @@
 				else alert('You lose.');
 				enableCols(false);
 				log('Game over');
+				joinBtn.disabled = false;
 			} else if(msg.type === 'error'){
 				alert(msg.message || 'Error');
+				joinBtn.disabled = false;
 			}
 		}
 
